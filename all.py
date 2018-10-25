@@ -15,19 +15,19 @@ LR = 0.01         # learning rate
 EPSILON = 0.9            # greedy policy
 GAMMA = 0.9                 # reward discount
 TARGET_REPLACE_ITER = 100   # target update frequency
-MEMORY_CAPACITY = 336
+MEMORY_CAPACITY = 1000
 
 env = gym.make('gpn-v0')
 env.create_thread(token = 'a7bf92fc-2bd6-4ab6-9180-9f403f8d490b')
 
 torch.set_num_threads(12)
-plt.ion()
-save_models = True
+
+SAVE_MODELS = False
+SAVE_GRAPHS = False
 # device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
-
 N_ACTIONS = 20
-N_STATES = 4
+N_STATES = 38
 prev_loss = 0
 x = []
 y = []
@@ -101,12 +101,13 @@ class DQN(object):
         q_target = b_r + GAMMA * q_next.max(1)[0].view(BATCH_SIZE, 1)   # shape (batch, 1)
         loss = self.loss_func(q_eval, q_target)
         if self.learn_step_counter != 0:
-            if loss[0].data.numpy() < self.min and save_models:
+            if loss[0].data.numpy() < self.min:
                 self.min = loss[0].data.numpy()
-                if first_save:
-                    torch.save(self.eval_net.state_dict(), f'models/{self.learn_step_counter}_{loss[0].data.numpy()}.model')
-                else:
-                    torch.save(self.eval_net, f'models/{self.learn_step_counter}_{self.min}.model')
+                if SAVE_MODELS:
+                    if first_save:
+                        torch.save(self.eval_net.state_dict(), f'models/{self.learn_step_counter}_{loss[0].data.numpy()}.model')
+                    else:
+                        torch.save(self.eval_net, f'models/{self.learn_step_counter}_{self.min}.model')
 
             print(f'{self.learn_step_counter} -- {loss[0].data.numpy()}, min = {self.min}')
             x.append(self.learn_step_counter)
@@ -115,7 +116,8 @@ class DQN(object):
         if self.learn_step_counter % 10 == 0:
             plt.title(f'net = {Net()}, batch = {BATCH_SIZE}, LR = {LR}')
             plt.plot(x,y)
-            plt.savefig('loss_graph.pdf', dpi = 100)
+            if SAVE_GRAPHS:
+                plt.savefig('loss_graph.pdf', dpi = 100)
             plt.show()
 
         self.prev_loss = loss[0].data.numpy()
@@ -123,24 +125,41 @@ class DQN(object):
         loss.backward()
         self.optimizer.step()
 
-def get_state(s, prev_pr):
+def get_state(s, prev_pr=-1, prev_reward=-1):
     dates = np.datetime64(s['date_time'])
     dates = pd.DatetimeIndex([dates])
+
     if dates.dayofweek[0] < 6:
         holiday = 0
     else:
         holiday = 1
 
-    return [dates.month[0], dates.day[0], dates.hour[0], holiday]
+    month_vec = np.zeros(4)
+    month_vec[dates.month[0]%6] = 1
+
+    day_of_week_vec = np.zeros(7)
+    day_of_week_vec[dates.dayofweek[0]] = 1
+
+    hour_vec = np.zeros(24)
+    hour_vec[dates.hour] = 1
+
+    return np.concatenate((month_vec, day_of_week_vec, hour_vec, np.array([holiday, prev_pr, prev_reward])))
 
 dqn = DQN()
 print('\nCollecting experience...')
 for i_episode in range(400):
-    s = [5, 31, 23, 0]
     env.reset()
     ep_r = 0
-    last_pr = 35
-    first = True
+
+    s = get_state({'date_time':'2018-06-01T00:00:00'})
+    a = dqn.choose_action(s)
+    s_, r, done, info = env.step(a)
+    prev_price = a
+    prev_reward = r
+    my_s_ = get_state(s_, prev_price, prev_reward)
+    s = my_s_
+    ep_r += r
+
     counter = 0
     while True:
         # env.render()
@@ -149,13 +168,11 @@ for i_episode in range(400):
         # take action
         s_, r, done, info = env.step(a)
 
-        my_s_ = get_state(s_, last_pr)
-        last_pr = a
+        my_s_ = get_state(s_, prev_price, prev_reward)
+        prev_price = a
+        prev_reward = r
+        dqn.store_transition(s, a, r, my_s_)
 
-        if first:
-            first = False
-        else:
-            dqn.store_transition(s, a, r, my_s_)
         ep_r += r
         if dqn.memory_counter > MEMORY_CAPACITY:
             dqn.learn()
