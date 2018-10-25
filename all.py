@@ -17,6 +17,8 @@ TARGET_REPLACE_ITER = 100   # target update frequency
 MEMORY_CAPACITY = 500
 env = gym.make('gpn-v0')
 env.create_thread(token = 'a7bf92fc-2bd6-4ab6-9180-9f403f8d490b')
+torch.set_num_threads(12)
+
 
 N_ACTIONS = 20
 N_STATES = 4
