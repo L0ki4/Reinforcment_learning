@@ -5,24 +5,32 @@ import numpy as np
 import gym
 import gym_gpn
 import pandas as pd
+import matplotlib.pyplot as plt
 
 from time import sleep
 
 # Hyper Parameters
-BATCH_SIZE = 12
-LR = 0.05                # learning rate
+BATCH_SIZE = 48
+LR = 0.01         # learning rate
 EPSILON = 0.9            # greedy policy
 GAMMA = 0.9                 # reward discount
 TARGET_REPLACE_ITER = 100   # target update frequency
-MEMORY_CAPACITY = 500
+MEMORY_CAPACITY = 336
+
 env = gym.make('gpn-v0')
 env.create_thread(token = 'a7bf92fc-2bd6-4ab6-9180-9f403f8d490b')
+
 torch.set_num_threads(12)
+plt.ion()
+save_models = True
+# device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 
 N_ACTIONS = 20
 N_STATES = 4
 prev_loss = 0
+x = []
+y = []
 
 class Net(nn.Module):
     def __init__(self, ):
@@ -73,6 +81,7 @@ class DQN(object):
         self.memory_counter += 1
 
     def learn(self):
+        first_save = True
         # target parameter update
         if self.learn_step_counter % TARGET_REPLACE_ITER == 0:
             self.target_net.load_state_dict(self.eval_net.state_dict())
@@ -92,19 +101,27 @@ class DQN(object):
         q_target = b_r + GAMMA * q_next.max(1)[0].view(BATCH_SIZE, 1)   # shape (batch, 1)
         loss = self.loss_func(q_eval, q_target)
         if self.learn_step_counter != 0:
-            if loss[0].data.numpy() < self.min:
+            if loss[0].data.numpy() < self.min and save_models:
                 self.min = loss[0].data.numpy()
+                if first_save:
+                    torch.save(self.eval_net.state_dict(), f'models/{self.learn_step_counter}_{loss[0].data.numpy()}.model')
+                else:
+                    torch.save(self.eval_net, f'models/{self.learn_step_counter}_{self.min}.model')
+
             print(f'{self.learn_step_counter} -- {loss[0].data.numpy()}, min = {self.min}')
+            x.append(self.learn_step_counter)
+            y.append(loss[0].data.numpy())
+
+        if self.learn_step_counter % 10 == 0:
+            plt.title(f'net = {Net()}, batch = {BATCH_SIZE}, LR = {LR}')
+            plt.plot(x,y)
+            plt.savefig('loss_graph.pdf', dpi = 100)
+            plt.show()
+
         self.prev_loss = loss[0].data.numpy()
         self.optimizer.zero_grad()
         loss.backward()
         self.optimizer.step()
-
-        if self.learn_step_counter % 1000 == 0:
-            if self.learn_step_counter == 1000:
-                torch.save(self.eval_net.state_dict(), f'{self.learn_step_counter}_{loss[0].data.numpy()}.model')
-            else:
-                torch.save(self.eval_net, f'{self.learn_step_counter}_{self.min}.model')
 
 def get_state(s, prev_pr):
     dates = np.datetime64(s['date_time'])
@@ -117,7 +134,6 @@ def get_state(s, prev_pr):
     return [dates.month[0], dates.day[0], dates.hour[0], holiday]
 
 dqn = DQN()
-
 print('\nCollecting experience...')
 for i_episode in range(400):
     s = [5, 31, 23, 0]
@@ -141,7 +157,6 @@ for i_episode in range(400):
         else:
             dqn.store_transition(s, a, r, my_s_)
         ep_r += r
-
         if dqn.memory_counter > MEMORY_CAPACITY:
             dqn.learn()
             if done:

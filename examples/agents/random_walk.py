@@ -11,7 +11,7 @@ import pandas as pd
 from time import sleep
 
 # Hyper Parameters
-BATCH_SIZE = 48
+BATCH_SIZE = 24
 LR = 0.05                # learning rate
 EPSILON = 0.9            # greedy policy
 GAMMA = 0.9                 # reward discount
