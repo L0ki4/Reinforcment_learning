@@ -1,0 +1,1 @@
+from gym_gpn.envs.gpn_env import GpnEnv
