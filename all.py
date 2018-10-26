@@ -5,31 +5,36 @@ import numpy as np
 import gym
 import gym_gpn
 import pandas as pd
+
+MACHINE = 'remote'
+
 import matplotlib
-matplotlib.use('agg')
+if MACHINE == 'remote':
+    matplotlib.use('agg')
 import matplotlib.pyplot as plt
 
 from time import sleep
 
 # Hyper Parameters
-BATCH_SIZE = 48
+BATCH_SIZE = 24
 LR = 0.001         # learning rate
 EPSILON = 0.9            # greedy policy
 GAMMA = 0.9                 # reward discount
 TARGET_REPLACE_ITER = 150   # target update frequency
-MEMORY_CAPACITY = 100#336  # 336 hours in a 2 weeks try month = 744 hours
+MEMORY_CAPACITY = 168
+
 
 env = gym.make('gpn-v0')
 env.create_thread(token='a7bf92fc-2bd6-4ab6-9180-9f403f8d490b')
 
 torch.set_num_threads(12)
 
-SAVE_MODELS = False
-SAVE_GRAPHS = False
+SAVE_MODELS = True
+SAVE_GRAPHS = True
 # device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 N_ACTIONS = 20
-N_STATES = 36
+N_STATES = 33
 x = []
 y = []
 
@@ -51,11 +56,11 @@ class Net(nn.Module):
 
     def forward(self, x):
         x = self.fc1(x)
-        x = F.relu(x)
+        x = F.selu(x)
         x = self.fc2(x)
         x = F.relu(x)
         x = self.fc3(x)
-        x = F.relu(x)
+        x = F.selu(x)
         actions_value = self.out(x)
         return actions_value
 
@@ -124,13 +129,54 @@ class DQN(object):
             plt.plot(x,y)
             if SAVE_GRAPHS:
                 plt.savefig('loss_graph.png', dpi=100)
-            # plt.show()
+            if MACHINE == 'local':
+                plt.show()
 
         # update weights
         self.optimizer.zero_grad()
         loss.backward()
         self.optimizer.step()
 
+def submit():
+    env = gym.make('gpn-v0')
+    env.create_thread(token='df133af2-dccb-4f06-b31f-bf99c02b1ba9')
+
+    dqn = DQN()
+    dqn.eval_net.load_state_dict(torch.load('models/5204_3.model'))
+    dqn.target_net.load_state_dict(torch.load('models/5204_3.model'))
+
+    prev_price = 55
+    done = env.done
+    s = get_state({'date_time': '2018-07-26T23:00:00'}, prev_price)
+    a = dqn.choose_action(s)
+    s_, r, done, _ = env.step(a)
+
+    prev_price = a
+    my_s = get_state(s_, prev_price)
+
+    counter = 0
+    while True:
+        a = dqn.choose_action(my_s)
+
+        # take action
+        s_, r, done, _ = env.step(a)
+
+        # update prevs
+        prev_price = a
+        prev_volume = r / a
+
+        # postproccess state to features
+        my_s_ = get_state(s_, prev_price)
+
+        dqn.store_transition(s, a, r, my_s_)
+
+        if dqn.memory_counter > MEMORY_CAPACITY:
+            dqn.learn()
+
+        if done:
+            break
+
+        print(str(s_['date_time']) + ',' + str(env.cum_reward) + ',' + str(a))
 
 def get_state(s, prev_pr=-1, prev_volume=-1):
     dates = np.datetime64(s['date_time'])
@@ -150,78 +196,80 @@ def get_state(s, prev_pr=-1, prev_volume=-1):
     hour_vec = np.zeros(24)
     hour_vec[dates.hour] = 1
 
-    return np.concatenate((month_vec, day_of_week_vec, hour_vec, np.array([holiday])))
+    return np.concatenate((day_of_week_vec, hour_vec, np.array([holiday, prev_pr])))
 
-
-dqn = DQN()
-print('\nCollecting experience...')
-for i_episode in range(400):
-    env.reset()
-    ep_r_test = 0
-    ep_r_train = 0
-    done_train = False
+def train():
+    dqn = DQN()
     first_save = True
+    print('\nCollecting experience...')
+    for i_episode in range(400):
+        env.reset()
+        ep_r_test = 0
+        ep_r_train = 0
+        done_train = False
 
-    s = get_state({'date_time': '2018-06-01T00:00:00'})
-    a = dqn.choose_action(s)
-    s_, r, done, _ = env.step(a)
-    prev_price = a
-    prev_volume = r/a
-    my_s_ = get_state(s_, prev_price, prev_volume)
-    s = my_s_
-    ep_r_train += r
-
-    counter = 0
-    while True:
+        s = get_state({'date_time': '2018-06-01T00:00:00'})
         a = dqn.choose_action(s)
-
-        # take action
         s_, r, done, _ = env.step(a)
-
-        # postproccess state to features
-        my_s_ = get_state(s_, prev_price, prev_volume)
-
-        # update prevs
         prev_price = a
         prev_volume = r/a
-
-        if done_train:
-            ep_r_test += r
-        else:
-            dqn.store_transition(s, a, r, my_s_)
-            ep_r_train += r
-
-        if dqn.memory_counter > MEMORY_CAPACITY and not done_train:
-            dqn.learn()
-
-        if done:
-            print('Ep: ', i_episode,
-                  '| Ep_r_train: ', round(ep_r_train, 2),
-                  '| Ep_r_test: ', round(ep_r_test, 2))
-            if SAVE_MODELS:  # model saving
-                if first_save:
-                    model_name = f'models/{dqn.learn_step_counter}_{i_episode}.model'
-                    torch.save(dqn.eval_net.state_dict(), model_name)
-                    first_save = False
-                else:
-                    torch.save(dqn.eval_net, f'models/{dqn.learn_step_counter}_{i_episode}.model')
-
-            x_r.append(i_episode)
-            train_r.append(ep_r_train)
-            test_r.append(ep_r_test)
-            if i_episode != 0 and SAVE_GRAPHS:
-                plt.figure(2)
-                plt.title('Ep: ', i_episode,
-                  '| Ep_r_train: ', round(ep_r_train, 2),
-                  '| Ep_r_test: ', round(ep_r_test, 2))
-                plt.plot(x_r, train_r, 'r')
-                plt.plot(x_r, test_r, 'b')
-                plt.legend(['train', 'test'])
-                plt.savefig('cum_rews.png', dpi=100)
-            break
-
-        if s_['date_time'] == '2018-07-26T23:00:00':
-            done_train = True
-
+        my_s_ = get_state(s_, prev_price, prev_volume)
         s = my_s_
-        counter += 1
+        ep_r_train += r
+
+        counter = 0
+        while True:
+            a = dqn.choose_action(s)
+
+            # take action
+            s_, r, done, _ = env.step(a)
+
+            # update prevs
+            prev_price = a
+            prev_volume = r / a
+
+            # postproccess state to features
+            my_s_ = get_state(s_, prev_price, prev_volume)
+
+            if done_train:
+                ep_r_test += r
+            else:
+                dqn.store_transition(s, a, r, my_s_)
+                ep_r_train += r
+
+            if dqn.memory_counter > MEMORY_CAPACITY and not done_train:
+                dqn.learn()
+
+            if done:
+                print('Ep: ', i_episode,
+                      '| Ep_r_train: ', round(ep_r_train, 2),
+                      '| Ep_r_test: ', round(ep_r_test, 2))
+                if SAVE_MODELS:  # model saving
+                    if first_save:
+                        model_name = f'models/{dqn.learn_step_counter}_{i_episode}.model'
+                        torch.save(dqn.eval_net.state_dict(), model_name)
+                        first_save = False
+                    else:
+                        torch.save(dqn.eval_net, f'models/{dqn.learn_step_counter}_{i_episode}.model')
+
+                x_r.append(i_episode)
+                train_r.append(ep_r_train)
+                test_r.append(ep_r_test)
+                if i_episode != 0 and SAVE_GRAPHS:
+                    plt.figure(2)
+                    plt.plot(x_r, train_r, 'r')
+                    plt.plot(x_r, test_r, 'b')
+                    plt.legend(['train', 'test'])
+                    plt.savefig('cum_rews.png', dpi=100)
+                    if MACHINE == 'local':
+                        plt.show()
+                break
+
+            if s_['date_time'] == '2018-07-26T23:00:00':
+                done_train = True
+
+            s = my_s_
+            counter += 1
+
+if __name__ == '__main__':
+    train()
