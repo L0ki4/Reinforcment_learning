@@ -5,6 +5,8 @@ import numpy as np
 import gym
 import gym_gpn
 import pandas as pd
+import matplotlib
+matplotlib.use('agg')
 import matplotlib.pyplot as plt
 
 from time import sleep
@@ -15,7 +17,7 @@ LR = 0.001         # learning rate
 EPSILON = 0.9            # greedy policy
 GAMMA = 0.9                 # reward discount
 TARGET_REPLACE_ITER = 150   # target update frequency
-MEMORY_CAPACITY = 744 # 336 hours in a 2 weeks try month = 744 hours
+MEMORY_CAPACITY = 100#336  # 336 hours in a 2 weeks try month = 744 hours
 
 env = gym.make('gpn-v0')
 env.create_thread(token='a7bf92fc-2bd6-4ab6-9180-9f403f8d490b')
@@ -94,8 +96,8 @@ class DQN(object):
         self.learn_step_counter += 1
 
         # sample batch transitions
-        sample_index = np.random.choice(MEMORY_CAPACITY, BATCH_SIZE)
-        b_memory = self.memory[sample_index, :]
+
+        b_memory = self.memory[-BATCH_SIZE:, :]
         b_s = torch.FloatTensor(b_memory[:, :N_STATES])
         b_a = torch.LongTensor(b_memory[:, N_STATES:N_STATES+1].astype(int))
         b_r = torch.FloatTensor(b_memory[:, N_STATES+1:N_STATES+2])
@@ -110,20 +112,14 @@ class DQN(object):
         if self.learn_step_counter != 0: # update min loss
             if loss[0].data.numpy() < self.min:
                 self.min = loss[0].data.numpy()
-                if SAVE_MODELS: # model saving
-                    if first_save:
-                        model_name = f'models/{self.learn_step_counter}_{loss[0].data.numpy()}.model'
-                        torch.save(self.eval_net.state_dict(), model_name)
-                    else:
-                        torch.save(self.eval_net, f'models/{self.learn_step_counter}_{self.min}.model')
-
-            # save and print current loss
-            print(f'{self.learn_step_counter} -- {loss[0].data.numpy()}, min = {self.min}')
+                # save and print current loss
+                print(f'{self.learn_step_counter} -- min = {self.min}')
             x.append(self.learn_step_counter)
             y.append(loss[0].data.numpy())
 
         # loss plot
         if self.learn_step_counter % 10 == 0:
+            plt.figure(1)
             plt.title(f'net = {Net()}, batch = {BATCH_SIZE}, LR = {LR}')
             plt.plot(x,y)
             if SAVE_GRAPHS:
@@ -164,6 +160,7 @@ for i_episode in range(400):
     ep_r_test = 0
     ep_r_train = 0
     done_train = False
+    first_save = True
 
     s = get_state({'date_time': '2018-06-01T00:00:00'})
     a = dqn.choose_action(s)
@@ -201,17 +198,29 @@ for i_episode in range(400):
             print('Ep: ', i_episode,
                   '| Ep_r_train: ', round(ep_r_train, 2),
                   '| Ep_r_test: ', round(ep_r_test, 2))
+            if SAVE_MODELS:  # model saving
+                if first_save:
+                    model_name = f'models/{dqn.learn_step_counter}_{i_episode}.model'
+                    torch.save(dqn.eval_net.state_dict(), model_name)
+                    first_save = False
+                else:
+                    torch.save(dqn.eval_net, f'models/{dqn.learn_step_counter}_{i_episode}.model')
+
             x_r.append(i_episode)
             train_r.append(ep_r_train)
             test_r.append(ep_r_test)
             if i_episode != 0 and SAVE_GRAPHS:
+                plt.figure(2)
+                plt.title('Ep: ', i_episode,
+                  '| Ep_r_train: ', round(ep_r_train, 2),
+                  '| Ep_r_test: ', round(ep_r_test, 2))
                 plt.plot(x_r, train_r, 'r')
                 plt.plot(x_r, test_r, 'b')
                 plt.legend(['train', 'test'])
                 plt.savefig('cum_rews.png', dpi=100)
             break
 
-        if s_['date_time'] == '2018-08-01T00:00:00':
+        if s_['date_time'] == '2018-07-26T23:00:00':
             done_train = True
 
         s = my_s_
