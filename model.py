@@ -48,7 +48,7 @@ class DQN(object):
     def choose_action(self, x):
         x = torch.unsqueeze(torch.FloatTensor(x), 0)
         # input only one sample
-        if np.random.uniform() < constants.EPSILON:   # greedy
+        if np.random.uniform() < constants.EPSILON and self.memory_counter > constants.MEMORY_CAPACITY:   # greedy
             actions_value = self.eval_net.forward(x)
             action = 35 + torch.max(actions_value, 1)[1].data.numpy()[0]
         else:   # random
