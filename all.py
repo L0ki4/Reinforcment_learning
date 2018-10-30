@@ -20,11 +20,11 @@ x_r = []
 train_r = []
 test_r = []
 
-x_week = []
-y_week = []
-
-x_day = []
-y_day = []
+# x_week = []
+# y_week = []
+#
+# x_day = []
+# y_day = []
 
 def train():
     dqn = model.DQN()
@@ -35,19 +35,40 @@ def train():
         ep_r_test = 0
         ep_r_train = 0
         done_train = False
+        price_dict = dict()
+        reward_dict = dict()
 
-        s = get_state({'date_time': '2018-06-01T00:00:00'})
+        s = get_state({'date_time': '2018-05-31T23:00:00'}, reward_dict, price_dict)
+
         a = dqn.choose_action(s)
         s_, r, done, _ = env.step(a)
-        prev_price = a
-        my_s_ = get_state(s_, prev_price)
+
+        price_dict[s_['date_time']] = a
+        reward_dict[s_['date_time']] = r
+
+        my_s_ = get_state(s_, reward_dict, price_dict)
         s = my_s_
         ep_r_train += r
 
-        y_week.append(r)
-        y_day.append(r)
+        # y_week.append(r)
+        # y_day.append(r)
 
         counter = 1
+        for hours in range(7*24):
+            a = dqn.choose_action(s)
+            s_, r, done, _ = env.step(a)
+
+            price_dict[s_['date_time']] = a
+            reward_dict[s_['date_time']] = r
+
+            my_s_ = get_state(s_, reward_dict, price_dict)
+            s = my_s_
+            ep_r_train += r
+
+            # y_week.append(r)
+            # y_day.append(r)
+
+            counter += 1
         while True:
             if not done_train:
                 a = dqn.choose_action(s)
@@ -56,16 +77,18 @@ def train():
 
             # take action
             s_, r, done, _ = env.step(a)
-            y_week[counter // (7*24)] += r
-            y_day[counter // 24] += r
+            price_dict[s_['date_time']] = a
+            reward_dict[s_['date_time']] = r
+
+            # y_week[counter // (7*24)] += r
+            # y_day[counter // 24] += r
 
             # update prevs
             date = s_['date_time']
-            print(f'at {date} with price = {prev_price} reward is {r}')
-            prev_price = a
+            print(f'at {date} with price = {a} reward is {r}')
 
             # postproccess state to features
-            my_s_ = get_state(s_, prev_price)
+            get_state(s_, reward_dict, price_dict)
 
             if done_train:
                 ep_r_test += r
@@ -75,8 +98,6 @@ def train():
 
             if dqn.memory_counter > constants.MEMORY_CAPACITY and not done_train:
                 dqn.learn()
-            else:
-                print(dqn.memory_counter)
 
             if s_['date_time'] == '2018-07-26T23:00:00':
                 done_train = True
@@ -84,25 +105,25 @@ def train():
             s = my_s_
             counter += 1
 
-            if counter % (7*24) == 0:
-                x_week.append(counter // (7*24))
-                y_week[counter // (7*24) - 1] /= 7*24
-                plt.figure(3)
-                plt.title('mean by week')
-                plt.plot(x_week, y_week, 'r')
-                if constants.SAVE_GRAPHS:
-                    plt.savefig('mean_week.png', dpi=100)
-                y_week.append(0)
+            # if counter % (7*24) == 0:
+            #     x_week.append(counter // (7*24))
+            #     y_week[counter // (7*24) - 1] /= 7*24
+            #     plt.figure(3)
+            #     plt.title('mean by week')
+            #     plt.plot(x_week, y_week, 'r')
+            #     if constants.SAVE_GRAPHS:
+            #         plt.savefig('mean_week.png', dpi=100)
+            #     y_week.append(0)
 
-            if counter % 24 == 0:
-                x_day.append(counter // 24)
-                y_day[counter // 24 - 1] /= 24
-                plt.figure(4)
-                plt.title('mean by day')
-                plt.plot(x_day, y_day, 'r')
-                if constants.SAVE_GRAPHS:
-                    plt.savefig('mean_day.png', dpi=100)
-                y_day.append(0)
+            # if counter % 24 == 0:
+            #     x_day.append(counter // 24)
+            #     y_day[counter // 24 - 1] /= 24
+            #     plt.figure(4)
+            #     plt.title('mean by day')
+            #     plt.plot(x_day, y_day, 'r')
+            #     if constants.SAVE_GRAPHS:
+            #         plt.savefig('mean_day.png', dpi=100)
+            #     y_day.append(0)
 
             if done:
                 print('Ep: ', i_episode,

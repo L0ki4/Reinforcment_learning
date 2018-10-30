@@ -1,11 +1,11 @@
-MACHINE = 'remote'
+MACHINE = 'local'
 
 BATCH_SIZE = 24
-LR = 0.001         # learning rate
+LR = 0.1         # learning rate
 EPSILON = 0.9            # greedy policy
 GAMMA = 0.9                 # reward discount
-TARGET_REPLACE_ITER = 168   # target update frequency
-MEMORY_CAPACITY = 2016*11
+TARGET_REPLACE_ITER = 300   # target update frequency
+MEMORY_CAPACITY = 16*24
 
 test_token = 'df133af2-dccb-4f06-b31f-bf99c02b1ba9'
 train_token = 'a7bf92fc-2bd6-4ab6-9180-9f403f8d490b'
@@ -16,8 +16,8 @@ if MODE == 'train':
 else:
     TOKEN = test_token
 
-SAVE_MODELS = False
-SAVE_GRAPHS = False
+SAVE_MODELS = True
+SAVE_GRAPHS = True
 
 N_ACTIONS = 20
-N_STATES = 33
+N_STATES = 38

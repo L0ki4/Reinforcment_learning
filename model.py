@@ -48,7 +48,7 @@ class DQN(object):
     def choose_action(self, x):
         x = torch.unsqueeze(torch.FloatTensor(x), 0)
         # input only one sample
-        if np.random.uniform() < constants.EPSILON and self.memory_counter > constants.MEMORY_CAPACITY:   # greedy
+        if np.random.uniform() < constants.EPSILON:   # greedy
             actions_value = self.eval_net.forward(x)
             action = 35 + torch.max(actions_value, 1)[1].data.numpy()[0]
         else:   # random
@@ -76,7 +76,9 @@ class DQN(object):
 
         # sample batch transitions
 
-        b_memory = self.memory[-constants.BATCH_SIZE:, :]
+        # b_memory = self.memory[-constants.BATCH_SIZE:, :]
+        sample_index = np.random.choice(constants.MEMORY_CAPACITY, constants.BATCH_SIZE)
+        b_memory = self.memory[sample_index, :]
         b_s = torch.FloatTensor(b_memory[:, :constants.N_STATES])
         b_a = torch.LongTensor(b_memory[:, constants.N_STATES:constants.N_STATES+1].astype(int))
         b_r = torch.FloatTensor(b_memory[:, constants.N_STATES+1:constants.N_STATES+2])
@@ -108,7 +110,7 @@ class DQN(object):
         if self.learn_step_counter % 10 == 0:
             plt.figure(1)
             plt.title(f'net = {Net()}, batch = {constants.BATCH_SIZE}, LR = {constants.LR}')
-            plt.plot(x,y)
+            plt.plot(x, y)
             if constants.SAVE_GRAPHS:
                 plt.savefig('loss_graph.png', dpi=100)
             if constants.MACHINE == 'local':
