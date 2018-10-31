@@ -15,20 +15,20 @@ y = []
 class Net(nn.Module):
     def __init__(self, ):
         super(Net, self).__init__()
-        self.fc1 = nn.Linear(constants.N_STATES, 50)
+        self.fc1 = nn.Linear(constants.N_STATES, 1000)
         self.fc1.weight.data.normal_(0, 0.1)   # initialization
-        self.fc2 = nn.Linear(50, 100)
+        self.fc2 = nn.Linear(1000, 500)
         self.fc2.weight.data.normal_(0, 0.1)  # initialization
-        self.fc3 = nn.Linear(100, 200)
+        self.fc3 = nn.Linear(500, 250)
         self.fc3.weight.data.normal_(0, 0.1)  # initialization
-        self.out = nn.Linear(200, constants.N_ACTIONS)
+        self.out = nn.Linear(250, constants.N_ACTIONS)
         self.out.weight.data.normal_(0, 0.1)   # initialization
 
     def forward(self, x):
         x = self.fc1(x)
         x = F.selu(x)
         x = self.fc2(x)
-        x = F.relu(x)
+        x = F.selu(x)
         x = self.fc3(x)
         x = F.selu(x)
         actions_value = self.out(x)
@@ -83,7 +83,7 @@ class DQN(object):
         b_a = torch.LongTensor(b_memory[:, constants.N_STATES:constants.N_STATES+1].astype(int))
         b_r = torch.FloatTensor(b_memory[:, constants.N_STATES+1:constants.N_STATES+2])
         b_s_ = torch.FloatTensor(b_memory[:, -constants.N_STATES:])
-        
+
         device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
         b_s.to(device)
         b_a.to(device)

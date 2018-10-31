@@ -22,21 +22,28 @@ def get_state(s, reward_dict, price_dict):
         hour_price = price_dict[s['date_time']]
     except:
         hour_reward = 0
-        hour_price = 0
+        hour_price = 1
 
     try:
         day_reward = reward_dict[str(np.datetime64(s['date_time']) - np.timedelta64(23, 'h'))]
         day_price = price_dict[str(np.datetime64(s['date_time']) - np.timedelta64(23, 'h'))]
     except:
         day_reward = 0
-        day_price = 0
+        day_price = 1
+
+    try:
+        two_day_reward = reward_dict[str(np.datetime64(s['date_time']) - np.timedelta64(1, 'D') - np.timedelta64(23, 'h'))]
+        two_day_price = price_dict[str(np.datetime64(s['date_time']) - np.timedelta64(1, 'D') - np.timedelta64(23, 'h'))]
+    except:
+        two_day_reward = 0
+        two_day_price = 1
 
     try:
         week_reward = reward_dict[str(np.datetime64(s['date_time']) - np.timedelta64(6, 'D') - np.timedelta64(23, 'h'))]
         week_price = price_dict[str(np.datetime64(s['date_time']) - np.timedelta64(6, 'D') - np.timedelta64(23, 'h'))]
     except:
         week_reward = 0
-        week_price = 0
+        week_price = 1
 
-    return np.concatenate((day_of_week_vec, hour_vec, np.array([holiday, hour_reward, hour_price, day_reward,
-                            day_price, week_reward, week_price])))
+    return np.concatenate((day_of_week_vec, hour_vec, np.array([holiday, hour_price, day_price, two_day_price,
+                           week_price, day_reward, hour_reward, week_reward, two_day_reward])))

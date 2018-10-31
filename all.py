@@ -6,7 +6,7 @@ import constants
 import model
 from functions import get_state
 from model import Net
-
+import pickle
 if constants.MACHINE == 'remote':
     matplotlib.use('agg')
 import matplotlib.pyplot as plt
@@ -28,7 +28,8 @@ test_r = []
 
 def train():
     dqn = model.DQN()
-
+    f = open("epochs.txt", "w+")
+    f.close()
     print('\nCollecting experience...')
     for i_episode in range(400):
         env.reset()
@@ -70,10 +71,7 @@ def train():
 
             counter += 1
         while True:
-            if not done_train:
-                a = dqn.choose_action(s)
-            else:
-                a = dqn.get_action(s)
+            a = dqn.choose_action(s)
 
             # take action
             s_, r, done, _ = env.step(a)
@@ -91,12 +89,13 @@ def train():
             get_state(s_, reward_dict, price_dict)
 
             if done_train:
+                dqn.store_transition(s, a, r, my_s_)
                 ep_r_test += r
             else:
                 dqn.store_transition(s, a, r, my_s_)
                 ep_r_train += r
 
-            if dqn.memory_counter > constants.MEMORY_CAPACITY and not done_train:
+            if dqn.memory_counter > constants.MEMORY_CAPACITY:
                 dqn.learn()
 
             if s_['date_time'] == '2018-07-26T23:00:00':
@@ -126,6 +125,8 @@ def train():
             #     y_day.append(0)
 
             if done:
+                with open('epochs.txt', 'a+') as f:
+                    f.write(f'Ep: {i_episode}| Ep_r_train: {round(ep_r_train, 2)}| Ep_r_test: {round(ep_r_test, 2)} \n')
                 print('Ep: ', i_episode,
                       '| Ep_r_train: ', round(ep_r_train, 2),
                       '| Ep_r_test: ', round(ep_r_test, 2))
